@@ -1,3 +1,10 @@
+use std::path::PathBuf;
+use std::io::Read;
+use std::fs::File;
+use std::collections::HashMap;
+
+use serde_json::de;
+
 use bitreader::BitReader;
 use bit_vec::BitVec;
 
@@ -6,7 +13,7 @@ use data_encoding::HEXUPPER;
 use ::crypto::{gen_random_bytes, sha256};
 use ::error::{Error, ErrorKind};
 use ::mnemonic_type::MnemonicType;
-use ::language::Language;
+//use ::language::Language;
 use ::util::bit_from_u16_as_u11;
 use ::seed::Seed;
 
@@ -39,8 +46,25 @@ use ::seed::Seed;
 pub struct Mnemonic {
     string: String,
     seed: Seed,
-    lang: Language,
+    word_list: WordList,
     entropy: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct WordList {
+    pub language: String,
+    pub words: Vec<String>
+}
+
+impl WordList {
+    pub fn gen_wordmap(&self) -> HashMap<String, u16> {
+
+        let mut word_map: HashMap<String, u16> = HashMap::new();
+        for (i, item) in self.words.into_iter().enumerate() {
+            word_map.insert(item.to_owned(), i as u16);
+        }
+        word_map
+    }
 }
 
 impl Mnemonic {
@@ -53,9 +77,6 @@ impl Mnemonic {
     /// [Mnemonic::get_entropy()][Mnemonic::get_entropy()] for an owned `Vec<u8>`.
     ///
     ///
-    /// # Example
-    ///
-    /// ```
     /// use bip39::{Mnemonic, MnemonicType, Language};
     ///
     /// let mnemonic_type = MnemonicType::for_word_count(12).unwrap();
@@ -76,14 +97,20 @@ impl Mnemonic {
     /// [Mnemonic::as_entropy()]: ./mnemonic/struct.Mnemonic.html#method.as_entropy
     /// [Mnemonic::get_entropy()]: ./mnemonic/struct.Mnemonic.html#method.get_entropy
     pub fn new<S>(mnemonic_type: MnemonicType,
-                  lang: Language,
+                  path: PathBuf,
                   password: S) -> Result<Mnemonic, Error> where S: Into<String> {
 
+        let file = File::open(path)?;
+        let word_list: WordList;
+        match de::from_reader(file) {
+            Ok(w) => word_list = w,
+            Err(e) => return Err()
+        }
         let entropy_bits = mnemonic_type.entropy_bits();
 
         let entropy = gen_random_bytes(entropy_bits / 8)?;
 
-        Mnemonic::from_entropy(&entropy, mnemonic_type, lang, password)
+        Mnemonic::from_entropy(&entropy, mnemonic_type, word_list, password)
     }
 
     /// Create a [`Mnemonic`][Mnemonic] from generated entropy
@@ -102,7 +129,7 @@ impl Mnemonic {
     /// [Mnemonic]: ../mnemonic/struct.Mnemonic.html
     pub fn from_entropy<S>(entropy: &[u8],
                            mnemonic_type: MnemonicType,
-                           lang: Language,
+                           word_list: WordList,
                            password: S) -> Result<Mnemonic, Error> where S: Into<String> {
         let entropy_length_bits = entropy.len() * 8;
 
@@ -111,8 +138,6 @@ impl Mnemonic {
         }
 
         let num_words = mnemonic_type.word_count();
-
-        let word_list = lang.get_wordlist();
 
         let entropy_hash = sha256(entropy);
 
@@ -138,7 +163,7 @@ impl Mnemonic {
 
         let string = words.join(" ");
 
-        Mnemonic::from_string(string, lang, password.into())
+        Mnemonic::from_string(string, word_list, password.into())
     }
 
     /// Create a [`Mnemonic`][Mnemonic] from generated entropy hexadecimal representation
@@ -157,10 +182,10 @@ impl Mnemonic {
     /// [Mnemonic]: ../mnemonic/struct.Mnemonic.html
     pub fn from_entropy_hex<S>(entropy: &str,
                            mnemonic_type: MnemonicType,
-                           lang: Language,
+                           word_list: WordList,
                            password: S) -> Result<Mnemonic, Error> where S: Into<String> {
 
-        Mnemonic::from_entropy(&HEXUPPER.decode(entropy.as_ref())?, mnemonic_type, lang, password)
+        Mnemonic::from_entropy(&HEXUPPER.decode(entropy.as_ref())?, mnemonic_type, word_list, password)
     }
 
     /// Create a [`Mnemonic`][Mnemonic] from an existing mnemonic phrase
@@ -180,7 +205,7 @@ impl Mnemonic {
     ///
     /// [Mnemonic]: ../mnemonic/struct.Mnemonic.html
     pub fn from_string<S>(string: S,
-                          lang: Language,
+                          word_list: WordList,
                           password: S) -> Result<Mnemonic, Error> where S: Into<String> {
 
         let m = string.into();
@@ -190,14 +215,14 @@ impl Mnemonic {
         // can store it. We don't use the validate function here to avoid having a public API that
         // takes a phrase string and returns the entropy directly. See the Mnemonic::entropy()
         // docs for the reason.
-        let entropy = Mnemonic::entropy(&*m, lang)?;
+        let entropy = Mnemonic::entropy(&*m, word_list)?;
         let seed = Seed::generate(&m.as_bytes(), &p);
 
         let mnemonic = Mnemonic {
             string: (&m).clone(),
-            seed: seed,
-            lang: lang,
-            entropy: entropy
+            seed,
+            word_list,
+            entropy
         };
 
         Ok(mnemonic)
@@ -227,8 +252,8 @@ impl Mnemonic {
     ///
     /// [Mnemonic::from_string()]: ../mnemonic/struct.Mnemonic.html#method.from_string
     pub fn validate<S>(string: S,
-                       lang: Language) -> Result<(), Error> where S: Into<String> {
-        Mnemonic::entropy(string, lang).and(Ok(()))
+                       word_list: WordList) -> Result<(), Error> where S: Into<String> {
+        Mnemonic::entropy(string, word_list).and(Ok(()))
     }
 
     /// Calculate the checksum, verify it and return the entropy
@@ -237,14 +262,14 @@ impl Mnemonic {
     /// used as the seed is likely to cause problems for someone eventually. All the other functions
     /// that return something like that are explicit about what it is and what to use it for.
     fn entropy<S>(string: S,
-                  lang: Language) -> Result<Vec<u8>, Error> where S: Into<String> {
+                  word_list: WordList) -> Result<Vec<u8>, Error> where S: Into<String> {
         let m = string.into();
 
         let mnemonic_type = MnemonicType::for_phrase(&*m)?;
         let entropy_bits = mnemonic_type.entropy_bits();
         let checksum_bits = mnemonic_type.checksum_bits();
 
-        let word_map = lang.get_wordmap();
+        let word_map = word_list.gen_wordmap();
 
         let mut to_validate: BitVec = BitVec::new();
 
@@ -313,13 +338,6 @@ impl Mnemonic {
     /// Note: this clones the internal Mnemonic String instance
     pub fn get_string(&self) -> String {
         self.string.clone()
-    }
-
-    /// Get the [`Language`][Language]
-    ///
-    /// [Language]: ../language/struct.Language.html
-    pub fn get_language(&self) -> Language {
-        self.lang
     }
 
     /// Get a reference to the internal [`Seed`][Seed]

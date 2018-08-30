@@ -43,17 +43,18 @@ extern crate data_encoding;
 extern crate bitreader;
 extern crate bit_vec;
 extern crate ring;
+extern crate serde;
+extern crate serde_json;
+#[macro_use] extern crate serde_derive;
 
 mod mnemonic;
 mod error;
 mod mnemonic_type;
-mod language;
 mod util;
 mod seed;
 
 mod crypto;
 
-pub use language::Language;
 pub use mnemonic::Mnemonic;
 pub use mnemonic_type::MnemonicType;
 pub use seed::Seed;
