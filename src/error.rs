@@ -27,6 +27,10 @@ error_chain! {
             description("invalid entropy length for mnemonic type")
             display("Invalid entropy length {}bits for mnemonic type {}", entropy_length_bits, mnemonic_type)
         }
+        InvalidFile {
+            description("invalid file")
+            display("Unable to read file from path")
+        }
         LanguageUnavailable {
             description("wrapping key failed")
             display("Language unavailable")

@@ -51,7 +51,7 @@ pub struct Mnemonic {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct WordList {
+pub struct WordList {
     pub language: String,
     pub words: Vec<String>
 }
@@ -60,7 +60,7 @@ impl WordList {
     pub fn gen_wordmap(&self) -> HashMap<String, u16> {
 
         let mut word_map: HashMap<String, u16> = HashMap::new();
-        for (i, item) in self.words.into_iter().enumerate() {
+        for (i, item) in self.words.clone().into_iter().enumerate() {
             word_map.insert(item.to_owned(), i as u16);
         }
         word_map
@@ -104,13 +104,13 @@ impl Mnemonic {
         let word_list: WordList;
         match de::from_reader(file) {
             Ok(w) => word_list = w,
-            Err(e) => return Err()
+            Err(_) => return Err(ErrorKind::InvalidFile.into())
         }
         let entropy_bits = mnemonic_type.entropy_bits();
 
         let entropy = gen_random_bytes(entropy_bits / 8)?;
 
-        Mnemonic::from_entropy(&entropy, mnemonic_type, word_list, password)
+        Mnemonic::from_entropy(&entropy, mnemonic_type, &word_list, password)
     }
 
     /// Create a [`Mnemonic`][Mnemonic] from generated entropy
@@ -129,7 +129,7 @@ impl Mnemonic {
     /// [Mnemonic]: ../mnemonic/struct.Mnemonic.html
     pub fn from_entropy<S>(entropy: &[u8],
                            mnemonic_type: MnemonicType,
-                           word_list: WordList,
+                           word_list: &WordList,
                            password: S) -> Result<Mnemonic, Error> where S: Into<String> {
         let entropy_length_bits = entropy.len() * 8;
 
@@ -158,12 +158,12 @@ impl Mnemonic {
         let mut words: Vec<&str> = Vec::new();
         for _ in 0..num_words {
             let n = reader.read_u16(11);
-            words.push(word_list[n.unwrap() as usize].as_ref());
+            words.push(word_list.words[n.unwrap() as usize].as_ref());
         }
 
         let string = words.join(" ");
 
-        Mnemonic::from_string(string, word_list, password.into())
+        Mnemonic::from_string(string, word_list.clone(), password.into())
     }
 
     /// Create a [`Mnemonic`][Mnemonic] from generated entropy hexadecimal representation
@@ -182,10 +182,10 @@ impl Mnemonic {
     /// [Mnemonic]: ../mnemonic/struct.Mnemonic.html
     pub fn from_entropy_hex<S>(entropy: &str,
                            mnemonic_type: MnemonicType,
-                           word_list: WordList,
+                           word_list: &WordList,
                            password: S) -> Result<Mnemonic, Error> where S: Into<String> {
 
-        Mnemonic::from_entropy(&HEXUPPER.decode(entropy.as_ref())?, mnemonic_type, word_list, password)
+        Mnemonic::from_entropy(&HEXUPPER.decode(entropy.as_ref())?, mnemonic_type, &word_list, password)
     }
 
     /// Create a [`Mnemonic`][Mnemonic] from an existing mnemonic phrase
@@ -215,7 +215,7 @@ impl Mnemonic {
         // can store it. We don't use the validate function here to avoid having a public API that
         // takes a phrase string and returns the entropy directly. See the Mnemonic::entropy()
         // docs for the reason.
-        let entropy = Mnemonic::entropy(&*m, word_list)?;
+        let entropy = Mnemonic::entropy(&*m, &word_list)?;
         let seed = Seed::generate(&m.as_bytes(), &p);
 
         let mnemonic = Mnemonic {
@@ -253,7 +253,7 @@ impl Mnemonic {
     /// [Mnemonic::from_string()]: ../mnemonic/struct.Mnemonic.html#method.from_string
     pub fn validate<S>(string: S,
                        word_list: WordList) -> Result<(), Error> where S: Into<String> {
-        Mnemonic::entropy(string, word_list).and(Ok(()))
+        Mnemonic::entropy(string, &word_list).and(Ok(()))
     }
 
     /// Calculate the checksum, verify it and return the entropy
@@ -262,7 +262,7 @@ impl Mnemonic {
     /// used as the seed is likely to cause problems for someone eventually. All the other functions
     /// that return something like that are explicit about what it is and what to use it for.
     fn entropy<S>(string: S,
-                  word_list: WordList) -> Result<Vec<u8>, Error> where S: Into<String> {
+                  word_list: &WordList) -> Result<Vec<u8>, Error> where S: Into<String> {
         let m = string.into();
 
         let mnemonic_type = MnemonicType::for_phrase(&*m)?;
