@@ -1,5 +1,6 @@
+extern crate serde_json;
+
 use std::path::PathBuf;
-use std::io::Read;
 use std::fs::File;
 use std::collections::HashMap;
 
@@ -13,7 +14,6 @@ use data_encoding::HEXUPPER;
 use ::crypto::{gen_random_bytes, sha256};
 use ::error::{Error, ErrorKind};
 use ::mnemonic_type::MnemonicType;
-//use ::language::Language;
 use ::util::bit_from_u16_as_u11;
 use ::seed::Seed;
 
@@ -77,11 +77,17 @@ impl Mnemonic {
     /// [Mnemonic::get_entropy()][Mnemonic::get_entropy()] for an owned `Vec<u8>`.
     ///
     ///
-    /// use bip39::{Mnemonic, MnemonicType, Language};
+    /// use bip39::{Mnemonic, MnemonicType};
+    /// use std::path::PathBuf;
+    /// use std::fs::File;
+    /// use std::env;
     ///
-    /// let mnemonic_type = MnemonicType::for_word_count(12).unwrap();
+    /// let test_mnemonic = "park remain person kitchen mule spell knee armed position rail grid ankle";
     ///
-    /// let mnemonic = match Mnemonic::new(mnemonic_type, Language::English, "") {
+    /// let mut path = PathBuf::from(env::current_dir().unwrap());
+    /// path.push("src/english.json");
+    ///
+    /// let mnemonic = match Mnemonic::new(mnemonic_type, path, "") {
     ///     Ok(b) => b,
     ///     Err(e) => { println!("e: {}", e); return }
     /// };
@@ -100,12 +106,8 @@ impl Mnemonic {
                   path: PathBuf,
                   password: S) -> Result<Mnemonic, Error> where S: Into<String> {
 
-        let file = File::open(path)?;
-        let word_list: WordList;
-        match de::from_reader(file) {
-            Ok(w) => word_list = w,
-            Err(_) => return Err(ErrorKind::InvalidFile.into())
-        }
+        let word_list: WordList = Mnemonic::get_word_list(path).unwrap();
+
         let entropy_bits = mnemonic_type.entropy_bits();
 
         let entropy = gen_random_bytes(entropy_bits / 8)?;
@@ -118,10 +120,20 @@ impl Mnemonic {
     /// # Example
     ///
     /// ```
-    /// use bip39::{Mnemonic, MnemonicType, Language};
+    /// use bip39::{Mnemonic, MnemonicType};
+    /// use std::path::PathBuf;
+    /// use std::fs::File;
+    /// use std::env;
+    ///
+    /// let test_mnemonic = "park remain person kitchen mule spell knee armed position rail grid ankle";
+    ///
+    /// let mut path = PathBuf::from(env::current_dir().unwrap());
+    /// path.push("src/english.json");
+    /// 
+    /// let word_list = Mnemonic::get_word_list(path).unwrap();
     ///
     /// let entropy = &[0x33, 0xE4, 0x6B, 0xB1, 0x3A, 0x74, 0x6E, 0xA4, 0x1C, 0xDD, 0xE4, 0x5C, 0x90, 0x84, 0x6A, 0x79];
-    /// let mnemonic = Mnemonic::from_entropy(entropy, MnemonicType::for_key_size(128).unwrap(), Language::English, "").unwrap();
+    /// let mnemonic = Mnemonic::from_entropy(entropy, MnemonicType::for_key_size(128).unwrap(), &word_list, "").unwrap();
     ///
     /// assert_eq!("crop cash unable insane eight faith inflict route frame loud box vibrant", mnemonic.as_str());
     /// ```
@@ -171,10 +183,18 @@ impl Mnemonic {
     /// # Example
     ///
     /// ```
-    /// use bip39::{Mnemonic, MnemonicType, Language};
-    ///
+    /// use bip39::{Mnemonic, MnemonicType};
+    /// use std::path::PathBuf;
+    /// use std::fs::File;
+    /// use std::env;
+    /// 
+    /// let mut path = PathBuf::from(env::current_dir().unwrap());
+    /// path.push("src/english.json");
+    /// 
+    /// let word_list = Mnemonic::get_word_list(path).unwrap();
+    /// 
     /// let entropy = "33E46BB13A746EA41CDDE45C90846A79";
-    /// let mnemonic = Mnemonic::from_entropy_hex(entropy, MnemonicType::for_key_size(128).unwrap(), Language::English, "").unwrap();
+    /// let mnemonic = Mnemonic::from_entropy_hex(entropy, MnemonicType::for_key_size(128).unwrap(), &word_list, "").unwrap();
     ///
     /// assert_eq!("crop cash unable insane eight faith inflict route frame loud box vibrant", mnemonic.as_str());
     /// ```
@@ -196,11 +216,19 @@ impl Mnemonic {
     /// # Example
     ///
     /// ```
-    /// use bip39::{Mnemonic, Language};
+    /// use bip39::Mnemonic;
+    /// use std::path::PathBuf;
+    /// use std::fs::File;
+    /// use std::env;
     ///
     /// let test_mnemonic = "park remain person kitchen mule spell knee armed position rail grid ankle";
     ///
-    /// let mnemonic = Mnemonic::from_string(test_mnemonic, Language::English, "").unwrap();
+    /// let mut path = PathBuf::from(env::current_dir().unwrap());
+    /// path.push("src/english.json");
+    /// 
+    /// let word_list = Mnemonic::get_word_list(path).unwrap();
+    /// 
+    /// let mnemonic = Mnemonic::from_string(test_mnemonic, word_list, "").unwrap();
     /// ```
     ///
     /// [Mnemonic]: ../mnemonic/struct.Mnemonic.html
@@ -240,11 +268,19 @@ impl Mnemonic {
     /// # Example
     ///
     /// ```
-    /// use bip39::{Mnemonic, Language};
+    /// use bip39::Mnemonic;
+    /// use std::path::PathBuf;
+    /// use std::fs::File;
+    /// use std::env;
     ///
     /// let test_mnemonic = "park remain person kitchen mule spell knee armed position rail grid ankle";
     ///
-    /// match Mnemonic::validate(test_mnemonic, Language::English) {
+    /// let mut path = PathBuf::from(env::current_dir().unwrap());
+    /// path.push("src/english.json");
+    /// 
+    /// let word_list = Mnemonic::get_word_list(path).unwrap();
+    /// 
+    /// match Mnemonic::validate(test_mnemonic, word_list) {
     ///     Ok(_) => { println!("valid: {}", test_mnemonic); },
     ///     Err(e) => { println!("e: {}", e); return }
     /// }
@@ -314,11 +350,19 @@ impl Mnemonic {
     /// # Example
     ///
     /// ```
-    /// use bip39::{Mnemonic, Language};
+    /// use bip39::Mnemonic;
+    /// use std::path::PathBuf;
+    /// use std::fs::File;
+    /// use std::env;
     ///
     /// let test_mnemonic = "park remain person kitchen mule spell knee armed position rail grid ankle";
     ///
-    /// let mnemonic = Mnemonic::from_string(test_mnemonic, Language::English, "").unwrap();
+    /// let mut path = PathBuf::from(env::current_dir().unwrap());
+    /// path.push("src/english.json");
+    /// 
+    /// let word_list = Mnemonic::get_word_list(path).unwrap();
+    /// 
+    /// let mnemonic = Mnemonic::from_string(test_mnemonic, word_list, "").unwrap();
     ///
     /// let entropy: Vec<u8> = mnemonic.get_entropy();
     /// ```
@@ -370,11 +414,19 @@ impl Mnemonic {
     /// # Example
     ///
     /// ```
-    /// use bip39::{Mnemonic, Language};
+    /// use bip39::Mnemonic;
+    /// use std::path::PathBuf;
+    /// use std::fs::File; 
+    /// use std::env;
     ///
     /// let test_mnemonic = "park remain person kitchen mule spell knee armed position rail grid ankle";
     ///
-    /// let mnemonic = Mnemonic::from_string(test_mnemonic, Language::English, "").unwrap();
+    /// let mut path = PathBuf::from(env::current_dir().unwrap());
+    /// path.push("src/english.json");
+    /// 
+    /// let word_list = Mnemonic::get_word_list(path).unwrap();
+    /// 
+    /// let mnemonic = Mnemonic::from_string(test_mnemonic, word_list, "").unwrap();
     ///
     /// let entropy: &[u8] = mnemonic.as_entropy();
     /// ```
@@ -382,6 +434,32 @@ impl Mnemonic {
     /// Note: this function clones the internal entropy bytes
     pub fn as_entropy(&self) -> &[u8] {
         self.entropy.as_ref()
+    }
+
+    /// Get the word list given a directory path
+    /// 
+    /// # Example
+    /// 
+    /// ```
+    /// use bip39::Mnemonic;
+    /// use std::path::PathBuf;
+    /// use std::env;
+    /// 
+    /// let mut path = PathBuf::from(env::current_dir().unwrap());
+    /// path.push("src/english.json");
+    /// 
+    /// let word_list = Mnemonic::get_word_list(path).unwrap();
+    /// ```
+    /// 
+    pub fn get_word_list(path: PathBuf) -> Result<WordList, Error> {
+        let file = File::open(path).unwrap();
+        let word_list: WordList;
+
+        match de::from_reader(file) {
+            Ok(w) => word_list = w,
+            Err(_) => return Err(ErrorKind::InvalidFile.into())
+        }
+        Ok(word_list)
     }
 }
 

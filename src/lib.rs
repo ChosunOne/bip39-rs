@@ -8,13 +8,19 @@
 //! ## Quickstart
 //!
 //! ```rust
-//! use bip39::{Mnemonic, MnemonicType, Language, Seed};
+//! use bip39::{Mnemonic, MnemonicType, Seed};
+//! use std::path::PathBuf;
+//! use std::env;
 //!
 //! /// determines the number of words in the mnemonic phrase
 //! let mnemonic_type = MnemonicType::Type12Words;
-//!
+//! 
+//! /// get the path where a language .json file is located
+//! let mut path = PathBuf::from(env::current_dir().unwrap());
+//! path.push("src/english.json");
+//! 
 //! /// create a new randomly generated mnemonic phrase
-//! let mnemonic = match Mnemonic::new(mnemonic_type, Language::English, "") {
+//! let mnemonic = match Mnemonic::new(mnemonic_type, path, "") {
 //!     Ok(b) => b,
 //!     Err(e) => { println!("e: {}", e); return }
 //! };
